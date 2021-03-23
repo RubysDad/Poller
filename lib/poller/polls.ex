@@ -21,6 +21,12 @@ defmodule Poller.Polls do
     Repo.all(Poll)
   end
 
+  defp poll_with_options_query(id) do
+    from p in Poll,
+      where: p.id == ^id,
+      preload: [options: ^options_query()]
+  end
+
   @doc """
   Gets a single poll.
 
@@ -36,9 +42,9 @@ defmodule Poller.Polls do
 
   """
   def get_poll!(id) do
-    Poll
-    |> Repo.get!(id)
-    |> Repo.preload(:options)
+    id
+    |> poll_with_options_query()
+    |> Repo.one!()
   end
 
   @doc """
@@ -58,7 +64,7 @@ defmodule Poller.Polls do
     |> Poll.changeset(attrs)
     |> Repo.insert()
     |> case do
-      {:ok, %Poll{} = poll} -> {:ok, Repo.preload(poll, :options)}
+      {:ok, %Poll{} = poll} -> {:ok, Repo.preload(poll, options: options_query())}
       error -> error
     end
   end
@@ -139,7 +145,11 @@ defmodule Poller.Polls do
       ** (Ecto.NoResultsError)
 
   """
-  def get_option!(id), do: Repo.get!(Option, id)
+  def get_option!(id) do
+    id
+    |> option_query()
+    |> Repo.one!()
+  end
 
   @doc """
   Creates a option.
@@ -205,5 +215,114 @@ defmodule Poller.Polls do
   """
   def change_option(%Option{} = option, attrs \\ %{}) do
     Option.changeset(option, attrs)
+  end
+
+  alias Poller.Polls.Vote
+
+  @doc """
+  Returns the list of votes.
+
+  ## Examples
+
+      iex> list_votes()
+      [%Vote{}, ...]
+
+  """
+  def list_votes do
+    Repo.all(Vote)
+  end
+
+  @doc """
+  Gets a single vote.
+
+  Raises `Ecto.NoResultsError` if the Vote does not exist.
+
+  ## Examples
+
+      iex> get_vote!(123)
+      %Vote{}
+
+      iex> get_vote!(456)
+      ** (Ecto.NoResultsError)
+
+  """
+  def get_vote!(id), do: Repo.get!(Vote, id)
+
+  @doc """
+  Creates a vote.
+
+  ## Examples
+
+      iex> create_vote(%{field: value})
+      {:ok, %Vote{}}
+
+      iex> create_vote(%{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def create_vote(%Option{} = option) do
+    option
+    |> Ecto.build_assoc(:votes)
+    |> change_vote()
+    |> Repo.insert()
+  end
+
+  @doc """
+  Updates a vote.
+
+  ## Examples
+
+      iex> update_vote(vote, %{field: new_value})
+      {:ok, %Vote{}}
+
+      iex> update_vote(vote, %{field: bad_value})
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def update_vote(%Vote{} = vote, attrs) do
+    vote
+    |> Vote.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc """
+  Deletes a vote.
+
+  ## Examples
+
+      iex> delete_vote(vote)
+      {:ok, %Vote{}}
+
+      iex> delete_vote(vote)
+      {:error, %Ecto.Changeset{}}
+
+  """
+  def delete_vote(%Vote{} = vote) do
+    Repo.delete(vote)
+  end
+
+  @doc """
+  Returns an `%Ecto.Changeset{}` for tracking vote changes.
+
+  ## Examples
+
+      iex> change_vote(vote)
+      %Ecto.Changeset{data: %Vote{}}
+
+  """
+  def change_vote(%Vote{} = vote, attrs \\ %{}) do
+    Vote.changeset(vote, attrs)
+  end
+
+  defp options_query do
+    from o in Option,
+      left_join: v in assoc(o, :votes),
+      group_by: o.id,
+      select_merge: %{vote_count: count(v.id)}
+  end
+
+  defp option_query(id) do
+    from o in options_query(),
+      where: o.id == ^id
   end
 end
